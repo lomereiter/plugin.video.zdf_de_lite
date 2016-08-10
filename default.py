@@ -9,6 +9,7 @@ import re
 import xbmcplugin
 import xbmcgui
 import xbmcaddon
+import xml.etree.ElementTree as ET
 
 #addon = xbmcaddon.Addon()
 #addonID = addon.getAddonInfo('id')
@@ -237,29 +238,22 @@ def play100sec():
     match = re.compile('assetID : (.+?),', re.DOTALL).findall(content)
     playVideo(match[0])
 
+QUALITY_DICT = {'low': 0, 'med': 1, 'high': 2, 'veryhigh': 3}
 
 def playVideo(id):
     content = getUrl(baseUrl+"/ZDFmediathek/xmlservice/web/beitragsDetails?id="+id)
-    match0 = re.compile('<formitaet basetype="h264_aac_mp4_rtmp_zdfmeta_http" isDownload="false">.+?<quality>hd</quality>.+?<url>(.+?)</url>', re.DOTALL).findall(content)
-    match1 = re.compile('<formitaet basetype="h264_aac_mp4_rtmp_zdfmeta_http" isDownload="false">.+?<quality>veryhigh</quality>.+?<url>(.+?)</url>', re.DOTALL).findall(content)
-    match2 = re.compile('<formitaet basetype="h264_aac_mp4_rtmp_zdfmeta_http" isDownload="false">.+?<quality>high</quality>.+?<url>(.+?)</url>', re.DOTALL).findall(content)
-    match3 = re.compile('<formitaet basetype="h264_aac_ts_http_m3u8_http" isDownload="false">.+?<quality>high</quality>.+?<url>(.+?)</url>', re.DOTALL).findall(content)
     matchUT = re.compile('<caption>.+?<url>(.+?)</url>', re.DOTALL).findall(content)
     url = ""
-    if content.find("<type>livevideo</type>") >= 0:
-        if match3:
-            url = match3[0]
-    elif content.find("<type>video</type>") >= 0:
-        if match0:
-            url = match0[0]
-        elif match1:
-            url = match1[0]
-        elif match2:
-            url = match2[1]
-        if "http://" in url:
-            content = getUrl(url)
-            match = re.compile('<default-stream-url>(.+?)</default-stream-url>', re.DOTALL).findall(content)
-            url = match[0]
+    currQual = -1
+    xml = ET.fromstring(content)
+    sources = xml.find('video').find('formitaeten')
+    for source in sources.findall('formitaet'):
+        baseType = source.attrib['basetype']
+        if baseType == 'h264_aac_ts_http_m3u8_http':
+            qual = QUALITY_DICT[source.find('quality').text]
+            if qual > currQual:
+                url, currQual = source.find('url').text, qual
+
     listitem = xbmcgui.ListItem(path=url)
     xbmcplugin.setResolvedUrl(pluginhandle, True, listitem)
     if showSubtitles and matchUT:
